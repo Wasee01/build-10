@@ -1,0 +1,10 @@
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    show-sql: false
+registration:
+  rules:
+    registrar-contact-address: ${REGISTRAR_CONTACT_ADDRESS}

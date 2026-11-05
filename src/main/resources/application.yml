@@ -1,0 +1,46 @@
+spring:
+  application:
+    name: two-environments-one-jar
+  profiles:
+    default: dev
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/common
+registration:
+  rules:
+    max-credit-hours-per-term: ${REGISTRATION_MAX_CREDIT_HOURS_PER_TERM:18}
+    waitlist-size: ${REGISTRATION_WAITLIST_SIZE:10}
+    registration-window-grace-period: ${REGISTRATION_WINDOW_GRACE_PERIOD:PT24H}
+    registrar-contact-address: ${REGISTRAR_CONTACT_ADDRESS:registrar@example.edu}
+management:
+  endpoints:
+    access:
+      default: none
+    web:
+      exposure:
+        include: health,info,metrics
+    jmx:
+      exposure:
+        exclude: '*'
+  endpoint:
+    health:
+      access: read-only
+      show-details: never
+    info:
+      access: read-only
+    metrics:
+      access: read-only
+  health:
+    db:
+      enabled: true
+  info:
+    env:
+      enabled: true
+info:
+  app:
+    name: Two Environments, One Jar
+    description: Profile-driven enrollment configuration demonstration

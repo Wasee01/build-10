@@ -1,0 +1,54 @@
+name: Build and acceptance gates
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan full Git history and working tree
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.24.3 git /repo --redact --exit-code 1
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.24.3 dir /repo --redact --exit-code 1
+  build-and-acceptance:
+    needs: secret-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Generate ephemeral database credentials
+        run: |
+          echo "DB_USERNAME=u_$(openssl rand -hex 6)" >> "$GITHUB_ENV"
+          credential=$(openssl rand -hex 24)
+          echo "::add-mask::$credential"
+          echo "DB_PASSWORD=$credential" >> "$GITHUB_ENV"
+          echo "DB_URL=jdbc:postgresql://localhost:5432/enrollment" >> "$GITHUB_ENV"
+          echo "REGISTRAR_CONTACT_ADDRESS=registrar@example.edu" >> "$GITHUB_ENV"
+      - name: Start PostgreSQL with runtime credentials
+        run: |
+          docker run -d --name enrollment-postgres -p 127.0.0.1:5432:5432             -e POSTGRES_DB=enrollment -e POSTGRES_USER="$DB_USERNAME" -e POSTGRES_PASSWORD="$DB_PASSWORD"             --health-cmd='pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'             --health-interval=2s --health-timeout=3s --health-retries=30 postgres:17
+          for attempt in {1..60}; do
+            if [ "$(docker inspect -f '{{.State.Health.Status}}' enrollment-postgres)" = healthy ]; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Build and test once
+        run: ./mvnw --batch-mode verify
+      - name: Run same jar under both profiles
+        run: python3 scripts/verify_jar.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: application-jar
+          path: target/two-environments-one-jar-1.0.0.jar
+      - name: Remove verification database
+        if: always()
+        run: docker rm -f enrollment-postgres || true
